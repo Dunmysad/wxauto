@@ -1,0 +1,2 @@
+uiautomation==2.0.17
+wxauto==3.9.9
