@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from uiautomation import WindowControl
 import re
+import json
+import os
 
 class WX:
     def __init__(self):
@@ -36,12 +38,26 @@ class WXAutoUI:
         self.root.title("微信自动回复设置")
         self.root.geometry("500x400")
         
-        self.conditions = {
-            'forbidden_words': ["大师", "钻", "分", "段"],
-            'use_pattern': True
-        }
+        # 从JSON文件加载配置
+        self.load_config()
         
         self.setup_ui()
+        
+    def load_config(self):
+        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                self.conditions = {
+                    'forbidden_words': config.get('forbidden_words', ["大师", "钻", "分", "段", "猎"]),
+                    'use_pattern': config.get('use_pattern', True)
+                }
+        except (FileNotFoundError, json.JSONDecodeError):
+            # 如果配置文件不存在或格式错误，使用默认值
+            self.conditions = {
+                'forbidden_words': ["大师", "钻", "分", "段", "猎"],
+                'use_pattern': True
+            }
         
     def setup_ui(self):
         # 主框架
@@ -49,12 +65,24 @@ class WXAutoUI:
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 禁用关键词设置
-        keywords_frame = ttk.LabelFrame(main_frame, text="禁用关键词（包含任一词时不自动回复）", padding="10")
-        keywords_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        keywords_frame = ttk.LabelFrame(main_frame, text="禁用关键词（勾选后包含对应词时不自动回复）", padding="5")
+        keywords_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=2, padx=2)
         
-        self.keywords_var = tk.StringVar(value=",".join(self.conditions['forbidden_words']))
-        keywords_entry = ttk.Entry(keywords_frame, textvariable=self.keywords_var, width=50)
-        keywords_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        # 创建预设关键词的复选框
+        self.forbidden_word_vars = {}
+        checkboxes_frame = ttk.Frame(keywords_frame)
+        checkboxes_frame.pack(fill=tk.X, expand=True)
+        
+        # 从配置加载关键词并创建复选框
+        for word in self.conditions['forbidden_words']:
+            var = tk.BooleanVar(value=word in self.conditions['forbidden_words'])
+            checkbox = ttk.Checkbutton(
+                checkboxes_frame,
+                text=word,
+                variable=var
+            )
+            checkbox.pack(side=tk.LEFT, padx=1, pady=1, ipadx=2, ipady=2)
+            self.forbidden_word_vars[word] = var
         
         # 正则表达式模式设置
         pattern_frame = ttk.LabelFrame(main_frame, text="正则表达式匹配", padding="10")
@@ -91,7 +119,6 @@ class WXAutoUI:
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        keywords_frame.columnconfigure(0, weight=1)
         pattern_frame.columnconfigure(0, weight=1)
         status_frame.columnconfigure(0, weight=1)
         
@@ -100,8 +127,9 @@ class WXAutoUI:
         
     def update_conditions(self):
         # 更新条件设置
-        keywords = [kw.strip() for kw in self.keywords_var.get().split(",") if kw.strip()]
-        self.conditions['forbidden_words'] = keywords
+        # 获取被勾选的禁用词
+        selected_words = [word for word, var in self.forbidden_word_vars.items() if var.get()]
+        self.conditions['forbidden_words'] = selected_words
         self.conditions['use_pattern'] = self.use_pattern_var.get()
         
     def start_monitoring(self):
