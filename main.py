@@ -5,6 +5,7 @@ from uiautomation import WindowControl
 import re
 import json
 import os
+import sys
 
 class WX:
     def __init__(self):
@@ -32,6 +33,44 @@ class WX:
         else:
             return True
 
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径，适用于开发和打包后的情况"""
+    try:
+        # PyInstaller创建临时文件夹，并将路径存储在_MEIPASS中
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
+def get_config_path():
+    """获取配置文件路径，优先使用当前目录下的config.json，如果不存在则尝试上级目录"""
+    # 首先尝试当前工作目录
+    current_dir_config = os.path.join(os.getcwd(), 'config.json')
+    if os.path.exists(current_dir_config):
+        return current_dir_config
+    
+    # 然后尝试可执行文件所在目录（对于打包后的程序）
+    try:
+        exe_dir = os.path.dirname(sys.executable)
+        exe_dir_config = os.path.join(exe_dir, 'config.json')
+        if os.path.exists(exe_dir_config):
+            return exe_dir_config
+    except Exception:
+        pass
+    
+    # 最后尝试源码文件所在目录（开发模式下）
+    try:
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+        dev_config_path = os.path.join(base_path, 'config.json')
+        if os.path.exists(dev_config_path):
+            return dev_config_path
+    except Exception:
+        pass
+        
+    # 如果以上都没有，返回当前工作目录的路径
+    return current_dir_config
+
 class WXAutoUI:
     def __init__(self, root):
         self.root = root
@@ -44,7 +83,7 @@ class WXAutoUI:
         self.setup_ui()
         
     def load_config(self):
-        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        config_path = get_config_path()
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
@@ -58,6 +97,19 @@ class WXAutoUI:
                 'forbidden_words': ["大师", "钻", "分", "段", "猎"],
                 'use_pattern': True
             }
+    
+    def save_config(self):
+        """保存配置到文件"""
+        config_path = get_config_path()
+        config_data = {
+            'forbidden_words': self.conditions['forbidden_words'],
+            'use_pattern': self.conditions['use_pattern']
+        }
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"保存配置文件失败: {e}")
         
     def setup_ui(self):
         # 主框架
@@ -131,6 +183,8 @@ class WXAutoUI:
         selected_words = [word for word, var in self.forbidden_word_vars.items() if var.get()]
         self.conditions['forbidden_words'] = selected_words
         self.conditions['use_pattern'] = self.use_pattern_var.get()
+        # 保存配置到文件
+        self.save_config()
         
     def start_monitoring(self):
         try:
@@ -154,7 +208,7 @@ class WXAutoUI:
             return
             
         try:
-            self.update_conditions()
+            self.update_conditions()  # 每次循环都更新条件并保存配置
             message = self.wx_instance.get_message()
             continue_monitoring = self.wx_instance.process_message(message, self.conditions)
             
